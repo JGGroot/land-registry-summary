@@ -1,5 +1,5 @@
-import * as pdfjsLib from './node_modules/pdfjs-dist/build/pdf.mjs';
-import { Document, Paragraph, Table, TableCell, TableRow, TextRun, Packer } from './node_modules/docx/dist/index.mjs';
+import * as pdfjsLib from './vendor/pdf.mjs';
+import { Document, Paragraph, Table, TableCell, TableRow, TextRun, Packer } from './vendor/docx.mjs';
 
 const pdfInput = document.getElementById('pdfInput');
 const statusEl = document.getElementById('status');
@@ -8,7 +8,7 @@ const exportWordBtn = document.getElementById('exportWordBtn');
 
 let parsedSummary = null;
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = './node_modules/pdfjs-dist/build/pdf.worker.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
 
 pdfInput.addEventListener('change', async (event) => {
   const file = event.target.files?.[0];
