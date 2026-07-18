@@ -3,31 +3,108 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Land Registry Summary Tool</title>
+  <meta name="description" content="Create an editable title register summary from HM Land Registry official-copy PDFs, privately in your browser." />
+  <title>TitleBrief — Land Registry Summaries</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="app-shell">
-    <section class="panel intro-panel">
-      <h1>Land Registry Summary Tool</h1>
-      <p>Upload a land registry PDF with selectable text to create a structured summary table for title number, property description, proprietorship, charges, and restrictions.</p>
-      <label class="upload-box" for="pdfInput">
-        <span class="upload-title">Choose PDF</span>
-        <span class="upload-subtitle">or drop a file here</span>
-        <input id="pdfInput" type="file" accept="application/pdf" />
-      </label>
-      <div id="status" class="status">No file selected yet.</div>
+  <header class="site-header">
+    <a class="brand" href="#" aria-label="TitleBrief home">
+      <span class="brand-mark" aria-hidden="true"><span></span></span>
+      <span>TitleBrief</span>
+    </a>
+    <div class="privacy-pill"><span class="privacy-dot"></span>Private browser processing</div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">HM Land Registry summary tool</p>
+      <h1>From official copy to<br /><em>clear title overview.</em></h1>
+      <p class="hero-copy">Turn one or more standard title-register PDFs into a concise, editable table for legal professionals and landowners—without uploading the documents anywhere.</p>
     </section>
 
-    <section class="panel result-panel">
-      <div class="result-actions">
-        <button id="exportWordBtn" class="primary-btn" disabled>Download Word</button>
+    <section class="workspace" aria-labelledby="uploadHeading">
+      <div class="upload-column">
+        <div class="section-heading">
+          <span class="step-number">01</span>
+          <div>
+            <h2 id="uploadHeading">Add official copies</h2>
+            <p>Select several PDFs to build one combined table.</p>
+          </div>
+        </div>
+
+        <label class="upload-box" id="dropZone" for="pdfInput">
+          <input id="pdfInput" type="file" accept="application/pdf,.pdf" multiple />
+          <span class="upload-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" /></svg>
+          </span>
+          <span class="upload-title">Drop title registers here</span>
+          <span class="upload-subtitle">or <span>browse PDF files</span></span>
+          <span class="upload-meta">Selectable-text HM Land Registry PDFs · multiple files supported</span>
+        </label>
+
+        <div id="status" class="status" role="status" aria-live="polite">
+          <span class="status-icon" aria-hidden="true">i</span>
+          <span>No documents added yet.</span>
+        </div>
       </div>
-      <div id="summaryTableContainer" class="table-container">
-        <p class="placeholder">The parsed summary will appear here.</p>
+
+      <aside class="extract-card" aria-label="Information extracted">
+        <p class="card-kicker">What is extracted</p>
+        <ul>
+          <li><span>01</span><div><strong>Title &amp; land</strong><small>Description, plan colours, removals and mineral exceptions</small></div></li>
+          <li><span>02</span><div><strong>Legal proprietorship</strong><small>Registered owner names without postal addresses</small></div></li>
+          <li><span>03</span><div><strong>Financial charges</strong><small>Registered mortgage date and charge proprietor</small></div></li>
+          <li><span>04</span><div><strong>Restrictions</strong><small>Relevant disposal restrictions in clearer language</small></div></li>
+        </ul>
+        <div class="local-note">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12v10H6z" /></svg>
+          <p><strong>Documents stay on this device.</strong><br />No server, account or AI service is used.</p>
+        </div>
+      </aside>
+    </section>
+
+    <section id="resultsSection" class="results-section" aria-labelledby="resultsHeading" hidden>
+      <div class="results-topbar">
+        <div class="section-heading compact">
+          <span class="step-number">02</span>
+          <div>
+            <h2 id="resultsHeading">Review the summary</h2>
+            <p>Click any cell to correct wording before export.</p>
+          </div>
+        </div>
+        <div class="result-actions">
+          <button id="clearBtn" class="text-btn" type="button">Clear all</button>
+          <button id="exportWordBtn" class="primary-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14" /></svg>
+            Download Word table
+          </button>
+        </div>
       </div>
+
+      <div id="reviewNotice" class="review-notice" hidden></div>
+      <div class="table-wrap">
+        <table id="summaryTable">
+          <thead>
+            <tr>
+              <th>Title number</th>
+              <th>Land / property description</th>
+              <th>Legal proprietorship</th>
+              <th>Charges</th>
+              <th>Restrictions</th>
+            </tr>
+          </thead>
+          <tbody id="summaryTableBody"></tbody>
+        </table>
+      </div>
+      <p class="authority-note">This summary is for convenience and review. The official register and title plan remain authoritative.</p>
     </section>
   </main>
+
+  <footer class="site-footer">
+    <span>Built for careful first-pass title review.</span>
+    <span>Runs entirely in your browser.</span>
+  </footer>
 
   <script type="module" src="app.js"></script>
 </body>

@@ -1,208 +1,172 @@
 import * as pdfjsLib from './vendor/pdf.mjs';
-import { Document, Paragraph, Table, TableCell, TableRow, TextRun, Packer } from './vendor/docx.mjs';
+import { Packer } from './vendor/docx.mjs';
+import { parseLandRegistryText, textItemsToLines } from './parser.mjs';
+import { createWordDocument } from './word.mjs';
 
 const pdfInput = document.getElementById('pdfInput');
+const dropZone = document.getElementById('dropZone');
 const statusEl = document.getElementById('status');
-const tableContainer = document.getElementById('summaryTableContainer');
+const resultsSection = document.getElementById('resultsSection');
+const tableBody = document.getElementById('summaryTableBody');
+const reviewNotice = document.getElementById('reviewNotice');
 const exportWordBtn = document.getElementById('exportWordBtn');
+const clearBtn = document.getElementById('clearBtn');
 
-let parsedSummary = null;
+const fields = ['titleNumber', 'propertyDescription', 'proprietorship', 'charges', 'restrictions'];
+let summaries = [];
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
 
-pdfInput.addEventListener('change', async (event) => {
-  const file = event.target.files?.[0];
-  if (!file) {
-    return;
-  }
+pdfInput.addEventListener('change', () => processFiles(pdfInput.files));
 
-  statusEl.textContent = 'Extracting text from PDF...';
-  exportWordBtn.disabled = true;
+for (const eventName of ['dragenter', 'dragover']) {
+  dropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropZone.classList.add('is-dragging');
+  });
+}
 
-  try {
-    const text = await extractTextFromPdf(file);
-    parsedSummary = parseLandRegistryText(text);
-    renderSummary(parsedSummary);
-    statusEl.textContent = `Processed ${file.name}`;
-    exportWordBtn.disabled = false;
-  } catch (error) {
-    console.error(error);
-    statusEl.textContent = 'Unable to extract text from this PDF. Please try another file.';
-    tableContainer.innerHTML = '<p class="placeholder">No summary available.</p>';
+for (const eventName of ['dragleave', 'drop']) {
+  dropZone.addEventListener(eventName, (event) => {
+    event.preventDefault();
+    dropZone.classList.remove('is-dragging');
+  });
+}
+
+dropZone.addEventListener('drop', (event) => processFiles(event.dataTransfer?.files));
+
+tableBody.addEventListener('input', (event) => {
+  const cell = event.target.closest('[data-field]');
+  if (!cell) return;
+  const index = Number(cell.dataset.index);
+  const field = cell.dataset.field;
+  if (summaries[index] && fields.includes(field)) {
+    summaries[index][field] = cell.innerText.trim() || 'none';
   }
+});
+
+clearBtn.addEventListener('click', () => {
+  summaries = [];
+  pdfInput.value = '';
+  renderSummaries();
+  setStatus('No documents added yet.');
 });
 
 exportWordBtn.addEventListener('click', async () => {
-  if (!parsedSummary) {
+  if (!summaries.length) return;
+  exportWordBtn.disabled = true;
+  setStatus('Building the editable Word document…', 'working');
+  try {
+    const blob = await Packer.toBlob(createWordDocument(summaries));
+    const filename = summaries.length === 1 && summaries[0].titleNumber !== 'none'
+      ? `${summaries[0].titleNumber}-title-register-summary.docx`
+      : 'title-register-summary.docx';
+    triggerDownload(blob, filename);
+    setStatus(`Word table ready — ${summaries.length} ${pluralise('title', summaries.length)} included.`, 'success');
+  } catch (error) {
+    console.error(error);
+    setStatus('The Word document could not be created. Please try again.', 'error');
+  } finally {
+    exportWordBtn.disabled = false;
+  }
+});
+
+async function processFiles(fileList) {
+  const files = [...(fileList || [])].filter((file) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name));
+  if (!files.length) {
+    setStatus('Please choose one or more PDF files.', 'error');
     return;
   }
 
-  const doc = createWordDocument(parsedSummary);
-  const blob = await Packer.toBlob(doc);
-  triggerDownload(blob, 'land-registry-summary.docx');
-});
+  let failures = 0;
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    setStatus(`Reading ${index + 1} of ${files.length}: ${file.name}`, 'working');
+    try {
+      const text = await extractTextFromPdf(file);
+      const parsed = { ...parseLandRegistryText(text), sourceFile: file.name };
+      const existingIndex = parsed.titleNumber !== 'none'
+        ? summaries.findIndex((summary) => summary.titleNumber === parsed.titleNumber)
+        : -1;
+      if (existingIndex >= 0) summaries[existingIndex] = parsed;
+      else summaries.push(parsed);
+    } catch (error) {
+      failures += 1;
+      console.error(`Could not process ${file.name}`, error);
+    }
+  }
+
+  renderSummaries();
+  pdfInput.value = '';
+  if (!summaries.length) {
+    setStatus('No readable title registers were found. The PDF must contain selectable text.', 'error');
+  } else if (failures) {
+    setStatus(`${summaries.length} ${pluralise('title', summaries.length)} ready; ${failures} ${pluralise('file', failures)} could not be read.`, 'error');
+  } else {
+    setStatus(`${summaries.length} ${pluralise('title', summaries.length)} ready for review and Word export.`, 'success');
+    resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
 
 async function extractTextFromPdf(file) {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = '';
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, verbosity: 0 }).promise;
+  const pages = [];
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
     const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item) => ('str' in item ? item.str : ''))
-      .join(' ');
-    fullText += `\n\n[Page ${pageNumber}]\n${pageText}`;
+    const lines = textItemsToLines(textContent.items);
+    pages.push(`[Page ${pageNumber}]\n${lines.join('\n')}`);
   }
 
-  return fullText;
+  return pages.join('\n');
 }
 
-function parseLandRegistryText(text) {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  const titleNumber = extractTitleNumber(normalized);
-  const propertyDescription = extractSection(normalized, ['property register', 'property description', 'property']);
-  const proprietorship = extractSection(normalized, ['proprietorship register', 'proprietorship']);
-  const charges = extractSection(normalized, ['charges register', 'charges']);
-  const restrictions = extractSection(normalized, ['restrictions register', 'restrictions']);
+function renderSummaries() {
+  tableBody.replaceChildren();
+  resultsSection.hidden = summaries.length === 0;
+  if (!summaries.length) return;
 
-  return {
-    titleNumber: normalizeValue(titleNumber),
-    propertyDescription: normalizeValue(propertyDescription),
-    proprietorship: normalizeValue(proprietorship),
-    charges: normalizeValue(charges),
-    restrictions: normalizeValue(restrictions),
-  };
-}
-
-function extractTitleNumber(text) {
-  const patterns = [
-    /title\s*number\s*[:\-]?\s*([A-Za-z0-9\/\.\-]+)/i,
-    /title\s*[:\-]?\s*([A-Za-z0-9\/\.\-]+)/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      return match[1].trim();
-    }
-  }
-
-  return '';
-}
-
-function extractSection(text, headings) {
-  const pattern = new RegExp(`(${headings.map((heading) => heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'i');
-  const headingMatch = text.match(pattern);
-
-  if (!headingMatch) {
-    return '';
-  }
-
-  const startIndex = headingMatch.index + headingMatch[0].length;
-  const trailingMarkers = [
-    /\b(proprietorship register|proprietorship|charges register|charges|restrictions register|restrictions)\b/i,
-    /\btitle\s*number\b/i,
-  ];
-
-  let endIndex = text.length;
-  for (const marker of trailingMarkers) {
-    const markerMatch = text.slice(startIndex).search(marker);
-    if (markerMatch >= 0) {
-      const absoluteIndex = startIndex + markerMatch;
-      if (absoluteIndex < endIndex) {
-        endIndex = absoluteIndex;
-      }
-    }
-  }
-
-  const sectionText = text.slice(startIndex, endIndex).trim();
-  return sectionText.replace(/^[:\-\s]+/, '').trim();
-}
-
-function normalizeValue(value) {
-  if (!value || !value.toString().trim()) {
-    return 'none';
-  }
-  return value;
-}
-
-function renderSummary(summary) {
-  const rows = [
-    ['Title number', summary.titleNumber],
-    ['Land / property description', summary.propertyDescription],
-    ['Legal proprietorship', summary.proprietorship],
-    ['Charges', summary.charges],
-    ['Restrictions', summary.restrictions],
-  ];
-
-  const tableHtml = `
-    <table>
-      <thead>
-        <tr>
-          <th>Field</th>
-          <th>Details</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(([field, detail]) => `<tr><th>${escapeHtml(field)}</th><td>${escapeHtml(detail)}</td></tr>`).join('')}
-      </tbody>
-    </table>
-  `;
-
-  tableContainer.innerHTML = tableHtml;
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function createWordDocument(summary) {
-  return new Document({
-    sections: [{
-      properties: {},
-      children: [
-        new Paragraph({
-          children: [new TextRun({ text: 'Land Registry Summary', bold: true, size: 28 })],
-        }),
-        new Paragraph({ children: [new TextRun({ text: '' })] }),
-        new Table({
-          rows: [
-            new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph('Field')] }),
-                new TableCell({ children: [new Paragraph('Details')] }),
-              ],
-            }),
-            ...Object.entries(summary).map(([key, value]) => new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph(formatLabel(key))] }),
-                new TableCell({ children: [new Paragraph(value)] }),
-              ],
-            })),
-          ],
-        }),
-      ],
-    }],
+  summaries.forEach((summary, index) => {
+    const row = document.createElement('tr');
+    fields.forEach((field) => {
+      const cell = document.createElement('td');
+      cell.contentEditable = 'true';
+      cell.spellcheck = true;
+      cell.dataset.index = String(index);
+      cell.dataset.field = field;
+      cell.textContent = summary[field];
+      cell.title = `Edit ${fieldLabel(field)}`;
+      row.appendChild(cell);
+    });
+    tableBody.appendChild(row);
   });
+
+  const flagged = summaries.filter((summary) => summary.warnings?.length);
+  reviewNotice.hidden = flagged.length === 0;
+  if (flagged.length) {
+    reviewNotice.textContent = `${flagged.length} ${pluralise('row', flagged.length)} need a quick check because a core field was not confidently found: ${flagged.map((summary) => summary.titleNumber).join(', ')}.`;
+  }
 }
 
-function formatLabel(key) {
-  const labels = {
-    titleNumber: 'Title number',
-    propertyDescription: 'Land / property description',
-    proprietorship: 'Legal proprietorship',
-    charges: 'Charges',
-    restrictions: 'Restrictions',
-  };
+function setStatus(message, type = '') {
+  statusEl.className = `status${type ? ` is-${type}` : ''}`;
+  statusEl.querySelector('span:last-child').textContent = message;
+}
 
-  return labels[key] || key;
+function fieldLabel(field) {
+  return ({
+    titleNumber: 'title number',
+    propertyDescription: 'land / property description',
+    proprietorship: 'legal proprietorship',
+    charges: 'charges',
+    restrictions: 'restrictions',
+  })[field] || field;
+}
+
+function pluralise(word, count) {
+  return count === 1 ? word : `${word}s`;
 }
 
 function triggerDownload(blob, filename) {
@@ -212,6 +176,6 @@ function triggerDownload(blob, filename) {
   link.download = filename;
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
