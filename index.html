@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Land Registry Summary Tool</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section class="panel intro-panel">
+      <h1>Land Registry Summary Tool</h1>
+      <p>Upload a land registry PDF with selectable text to create a structured summary table for title number, property description, proprietorship, charges, and restrictions.</p>
+      <label class="upload-box" for="pdfInput">
+        <span class="upload-title">Choose PDF</span>
+        <span class="upload-subtitle">or drop a file here</span>
+        <input id="pdfInput" type="file" accept="application/pdf" />
+      </label>
+      <div id="status" class="status">No file selected yet.</div>
+    </section>
+
+    <section class="panel result-panel">
+      <div class="result-actions">
+        <button id="exportWordBtn" class="primary-btn" disabled>Download Word</button>
+      </div>
+      <div id="summaryTableContainer" class="table-container">
+        <p class="placeholder">The parsed summary will appear here.</p>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
